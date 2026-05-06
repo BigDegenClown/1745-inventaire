@@ -220,7 +220,7 @@
     </select>
   </div>
   <button class="btn-analyze" id="btnAnalyze" onclick="analyzeImages()">Analyser →</button>
-  <div class="loading" id="loading"><div class="spinner"></div><p>Gemini analyse vos photos…</p></div>
+  <div class="loading" id="loading"><div class="spinner"></div><p>Gemini réfléchit et compte…</p></div>
   <!-- Inventaire cumulé -->
   <div id="inventaireEnCours" style="display:none;margin-bottom:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -514,36 +514,33 @@ async function analyzeImages(){
 
     const catInstruction=catInstructions[selectedCat]||'';
     const productNames=(filteredCatalog.length>0?filteredCatalog:catalog).map(p=>`"${p.name}"`).join(', ');
-    parts.push({text:`Voici une photo d'inventaire. Les produits du catalogue sont : ${productNames}.${catInstruction?'\n'+catInstruction:''}
+    parts.push({text:`Tu analyses une photo d'inventaire de casier à bouteilles.${catInstruction?'\n'+catInstruction:''}
 
-Ignore les étiquettes papier éventuellement visibles sur le casier, identifie uniquement par collerette.
+ÉTAPE 1 — COMPTE RANGÉE PAR RANGÉE :
+Identifie chaque rangée horizontale visible (rangée 1 = haut, rangée N = bas).
+Pour chaque rangée, compte exactement le nombre de bouteilles. Vérifie deux fois chaque rangée avant de passer à la suivante.
+Note le détail : rangée 1 = X, rangée 2 = Y, etc.
+Total = somme de toutes les rangées.
 
-Commence par compter le nombre total de bouteilles visibles.
-
-Ensuite compte les collerettes par couleur :
-- collerettes noires (texte "BROTTE" souvent visible) : combien ?
-- collerettes blanches avec capsule bordeaux : combien ?
-- collerettes blanches avec liseré doré et capsule blanche avec pastille verte : combien ?
-- collerettes orange : combien ?
-- bouchons liège sans capsule : combien ?
-
-La somme des groupes doit égaler le total compté.
-
-Associe chaque groupe au produit correspondant dans le catalogue en comparant avec les photos de référence.
-Vue de face : prioriser l'étiquette si visible.
+ÉTAPE 2 — IDENTIFIE LES TYPES :
+Ignore les étiquettes papier collées sur le casier. Identifie uniquement par la collerette/capsule de chaque bouteille.
+Les produits du catalogue sont : ${productNames}.
+Compare avec les photos de référence fournies pour associer chaque collerette à un produit.
+La somme des quantités par produit DOIT être égale au total de l'étape 1.
 
 JSON sans markdown :
-{"products":[{"name":"nom exact du catalogue","qty":0,"confidence":"eleve","note":""}],"global_note":"total : X"}`});
+{"products":[{"name":"nom exact du catalogue","qty":0,"confidence":"eleve","note":""}],"global_note":"rangées : [détail] — total : X"}`});
 
     const contents=[{role:'user',parts}];
 
     const res=await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${apiKey}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents,generationConfig:{temperature:0}})
+      body:JSON.stringify({contents,generationConfig:{temperature:1,thinkingConfig:{thinkingBudget:8192}}})
     });
     if(!res.ok){const err=await res.json();throw new Error(err.error?.message||'Erreur API');}
     const data=await res.json();
-    const text=data.candidates?.[0]?.content?.parts?.[0]?.text||'';
+    const responseParts=data.candidates?.[0]?.content?.parts||[];
+    const text=responseParts.filter(p=>!p.thought).map(p=>p.text||'').join('');
     const match=text.match(/\{[\s\S]*\}/);
     if(!match) throw new Error('Réponse invalide');
     const parsed=JSON.parse(match[0]);
